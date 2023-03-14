@@ -21,6 +21,7 @@ vector< vector<FileInfo> > preShow;
 vector<FileInfo> curShow;
 void NTFS(BYTE sector[],wchar_t driver[])
 {
+    SetConsoleOutputCP(65001);
     showVBR(sector);
 
     wcscat(headPath,driver);
@@ -99,10 +100,6 @@ void NTFS(BYTE sector[],wchar_t driver[])
         
     }
     
-
-    delete[] vbr;
-    delete[] meh;
-    delete[] mah;
 }
 //READ-PARTITION
 //-------------------------------------------------------------------------------------------------------
@@ -112,8 +109,8 @@ void showVBR(BYTE sector[])
 
     printf("\nPartition info:\n\n");
 
-    char* oem = byte2PChar(vbr->oem,6);
-
+    char* oem = byte2PChar(vbr->oem,8);
+    oem[4] = '\0';
     //show VBR
     printf("File System: %s\n",oem);
     printf("Bytes per sector: %d\n",reverseByte(vbr->bytePerSector,2));
@@ -227,8 +224,9 @@ void read_Attr_$FileName(BYTE sector[])
     //show File Name
     file.name = "";
 
-    char *name = byte2PChar(maf + 66,reverseByte(mah->attrInfoSize,4)-66);
-    file.name = char2String(name,reverseByte(mah->attrInfoSize,4)-66);
+    int namesize = reverseByte(mah->attrInfoSize, 4) - 66;
+    char *name = byte2PChar(maf + 66,namesize);
+    file.name = char2String(name,namesize);
 
     file.idP = reverseByte(maf,6);
 
@@ -238,6 +236,9 @@ void read_Attr_$Data(BYTE sector[])
 {
     BYTE *mad = sector + byteRead;
 
+    if (file.name.find("t\0x\0t", 0) > file.name.size())
+        return;
+
     // If non-res
     if(reverseByte(mah->nonRes,2) == 1)
     {
@@ -245,13 +246,18 @@ void read_Attr_$Data(BYTE sector[])
         BYTE byte[1024];
         file.size = reverseByte((BYTE*)mah + 48,8);
         ReadSectorEx(L"\\\\.\\E:",reverseByte((BYTE*)mah + 66,2) * secPerClus,byte);
-        if(file.size < 1024)
+        if (file.size < 1024)
+        {
             file.data = byte2PChar(byte,file.size);
+            file.data.resize(file.size);
+        }
         else
         {
             file.data = byte2PChar(byte,1024);
+            file.data.resize(1024);
             file.data += "...to be continued";
         }
+
         return;
     }
 
@@ -264,6 +270,7 @@ void read_Attr_$Data(BYTE sector[])
 
     char* data = byte2PChar(mad,file.size);
     file.data = data;
+    file.data.resize(file.size);
 }
 //SHOW-TIME
 //-------------------------------------------------------------------------------------------------------
